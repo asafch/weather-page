@@ -673,6 +673,114 @@ function getMoonPhase(date) {
   return phase; // 0 = new moon, ~14.76 = full moon
 }
 
+// ── Client-side moonrise/moonset calculation ──
+// Low-precision lunar position + rise/set finding (Meeus-derived)
+function getMoonPosition(jd) {
+  var T = (jd - 2451545.0) / 36525.0;
+  var rad = Math.PI / 180;
+
+  // Mean elements (degrees)
+  var L0 = 218.3165 + 481267.8813 * T; // mean longitude
+  var M  = 134.9634 + 477198.8676 * T; // mean anomaly
+  var D  = 297.8502 + 445267.1115 * T; // mean elongation
+  var F  = 93.2720  + 483202.0175 * T;  // argument of latitude
+
+  L0 = L0 % 360; M = M % 360; D = D % 360; F = F % 360;
+
+  // Longitude corrections (principal terms)
+  var lon = L0
+    + 6.289 * Math.sin(M * rad)
+    + 1.274 * Math.sin((2 * D - M) * rad)
+    + 0.658 * Math.sin(2 * D * rad)
+    + 0.214 * Math.sin(2 * M * rad)
+    - 0.186 * Math.sin((M - 2 * D + 2 * F) * rad) // solar perturbation
+    - 0.114 * Math.sin(2 * F * rad);
+
+  // Latitude
+  var lat = 5.128 * Math.sin(F * rad)
+    + 0.281 * Math.sin((M + F) * rad)
+    + 0.278 * Math.sin((M - F) * rad);
+
+  // Parallax (distance proxy)
+  var hp = 0.9508
+    + 0.0518 * Math.cos(M * rad)
+    + 0.0095 * Math.cos((M - 2 * D) * rad)
+    + 0.0078 * Math.cos(2 * D * rad);
+
+  var dist = 6378.14 / Math.sin(hp * rad); // km (approx)
+
+  // Right ascension & declination
+  var obliq = 23.4393 - 0.0130 * T;
+  var lonRad = lon * rad, latRad = lat * rad, oblRad = obliq * rad;
+  var ra = Math.atan2(
+    Math.sin(lonRad) * Math.cos(oblRad) - Math.tan(latRad) * Math.sin(oblRad),
+    Math.cos(lonRad)
+  );
+  var dec = Math.asin(
+    Math.sin(latRad) * Math.cos(oblRad) + Math.cos(latRad) * Math.sin(oblRad) * Math.sin(lonRad)
+  );
+
+  return { ra: ra, dec: dec, parallax: hp * rad };
+}
+
+function dateToJD(date) {
+  return date.getTime() / 86400000 + 2440587.5;
+}
+
+function jdToDate(jd) {
+  return new Date((jd - 2440587.5) * 86400000);
+}
+
+function getMoonRiseSet(date, lat, lon) {
+  // Find moonrise and moonset for the given date at the given location.
+  // We scan the day in 5-minute increments looking for the moon crossing the horizon.
+  var rad = Math.PI / 180;
+  var latRad = lat * rad;
+
+  // Start at midnight in UTC for the given date
+  var y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
+  var startJD = dateToJD(new Date(Date.UTC(y, m, d, 0, 0, 0)));
+
+  // Moon's apparent radius correction for rise/set (about -0.583 deg for refraction + semidiameter)
+  var h0 = 0.125 * rad; // Moon uses +0.125 deg (parallax roughly cancels refraction)
+
+  var rise = null, set = null;
+  var prevAlt = null;
+
+  // Compute local sidereal time
+  function lst(jd) {
+    var T = (jd - 2451545.0) / 36525.0;
+    var gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T;
+    return (gmst % 360 + 360) % 360 + lon;
+  }
+
+  for (var i = 0; i <= 24 * 12; i++) { // every 5 minutes for 24 hours
+    var jd = startJD + i / (24 * 12);
+    var moon = getMoonPosition(jd);
+    var ha = (lst(jd) * rad) - moon.ra;
+
+    // Altitude including parallax correction
+    var sinAlt = Math.sin(latRad) * Math.sin(moon.dec)
+      + Math.cos(latRad) * Math.cos(moon.dec) * Math.cos(ha);
+    var alt = Math.asin(sinAlt) - moon.parallax + h0;
+
+    if (prevAlt !== null) {
+      if (prevAlt < 0 && alt >= 0 && !rise) {
+        // Interpolate
+        var frac = -prevAlt / (alt - prevAlt);
+        rise = jdToDate(startJD + (i - 1 + frac) / (24 * 12));
+      }
+      if (prevAlt >= 0 && alt < 0 && !set) {
+        var frac = prevAlt / (prevAlt - alt);
+        set = jdToDate(startJD + (i - 1 + frac) / (24 * 12));
+      }
+    }
+    prevAlt = alt;
+  }
+
+  return { rise: rise, set: set };
+}
+
 function moonPhaseIcon(phase) {
   // 8 phases
   if (phase < 1.85) return "\uD83C\uDF11"; // new
@@ -708,30 +816,16 @@ function fetchAll() {
     + "&timezone=" + encodeURIComponent(LOC.timezone)
     + "&forecast_days=7";
 
-  // Get today and tomorrow dates in the location's timezone
+  // Compute moonrise/moonset client-side
   var now = new Date();
-  var todayStr = now.toLocaleString("sv-SE", { timeZone: LOC.timezone }).slice(0, 10);
-  var tomorrow = new Date(now.getTime() + 86400000);
-  var tomorrowStr = tomorrow.toLocaleString("sv-SE", { timeZone: LOC.timezone }).slice(0, 10);
+  var localNow = new Date(now.toLocaleString("en-US", { timeZone: LOC.timezone }));
+  var today = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate());
+  var tomorrow = new Date(today.getTime() + 86400000);
+  var moonToday = getMoonRiseSet(today, LOC.lat, LOC.lon);
+  var moonTomorrow = getMoonRiseSet(tomorrow, LOC.lat, LOC.lon);
 
-  // Determine timezone UTC offset dynamically
-  var nowOffset = now.toLocaleString("en-US", { timeZone: LOC.timezone, timeZoneName: "shortOffset" });
-  var offsetMatch = nowOffset.match(/GMT([+-]\d+)/);
-  var tzOffset = offsetMatch ? encodeURIComponent((parseInt(offsetMatch[1]) >= 0 ? "+" : "") + ("0" + Math.abs(parseInt(offsetMatch[1]))).slice(-2) + ":00") : "%2B00%3A00";
-
-  var moonTodayUrl = "https://api.met.no/weatherapi/sunrise/3.0/moon?lat=" + LOC.lat + "&lon=" + LOC.lon
-    + "&date=" + todayStr + "&offset=" + tzOffset;
-  var moonTomorrowUrl = "https://api.met.no/weatherapi/sunrise/3.0/moon?lat=" + LOC.lat + "&lon=" + LOC.lon
-    + "&date=" + tomorrowStr + "&offset=" + tzOffset;
-
-  var fetchOpts = { headers: { "User-Agent": "WeatherScreen/1.0" } };
-
-  Promise.all([
-    fetch(weatherUrl).then(function(r) { return r.json(); }),
-    fetch(moonTodayUrl, fetchOpts).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetch(moonTomorrowUrl, fetchOpts).then(function(r) { return r.json(); }).catch(function() { return null; })
-  ]).then(function(results) {
-    render(results[0], results[1], results[2]);
+  fetch(weatherUrl).then(function(r) { return r.json(); }).then(function(data) {
+    render(data, moonToday, moonTomorrow);
   }).catch(function() {
     document.getElementById("loading").textContent = "Could not load weather data";
   });
@@ -899,11 +993,11 @@ function renderSunArc(data, now) {
 function renderMoonArc(moonToday, moonTomorrow, now) {
   var localNow = new Date(now.toLocaleString("en-US", { timeZone: LOC.timezone }));
 
-  // Extract moonrise/moonset times from met.no response
-  var todayRise = extractMoonTime(moonToday, "moonrise");
-  var todaySet = extractMoonTime(moonToday, "moonset");
-  var tomorrowRise = extractMoonTime(moonTomorrow, "moonrise");
-  var tomorrowSet = extractMoonTime(moonTomorrow, "moonset");
+  // Extract moonrise/moonset times from client-side calculation
+  var todayRise = moonToday && moonToday.rise ? moonToday.rise : null;
+  var todaySet = moonToday && moonToday.set ? moonToday.set : null;
+  var tomorrowRise = moonTomorrow && moonTomorrow.rise ? moonTomorrow.rise : null;
+  var tomorrowSet = moonTomorrow && moonTomorrow.set ? moonTomorrow.set : null;
 
   // Determine the current arc: find the moonrise/moonset pair that brackets now
   var riseTime = null, setTime = null;
@@ -967,16 +1061,6 @@ function renderMoonArc(moonToday, moonTomorrow, now) {
     "\u2022 " + moonPhaseIcon(phase) + " " + moonPhaseName(phase);
 }
 
-function extractMoonTime(moonData, key) {
-  if (!moonData) return null;
-  // met.no v3 format: { properties: { moonrise: { time: "..." }, moonset: { time: "..." } } }
-  // or it may be in moonData.properties directly
-  var props = moonData.properties || moonData;
-  if (props[key] && props[key].time) {
-    return new Date(props[key].time);
-  }
-  return null;
-}
 
 function renderEvents(containerId, events) {
   var el = document.getElementById(containerId);

@@ -18,7 +18,7 @@ A full-screen weather dashboard designed for always-on displays (e.g. an iPad by
 |------|--------|---------|
 | Weather forecast | [Open-Meteo](https://open-meteo.com) | Not required |
 | Geocoding | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | Not required |
-| Moonrise/moonset | [met.no Sunrise API](https://api.met.no/weatherapi/sunrise/3.0/) | Not required |
+| Moonrise/moonset | Calculated client-side (astronomical algorithm) | N/A |
 | Moon phase | Calculated client-side (synodic month) | N/A |
 
 ## Usage
