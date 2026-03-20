@@ -128,19 +128,19 @@
   .cloud::before, .cloud::after {
     content: ''; position: absolute; background: inherit; border-radius: 50%;
   }
-  .cloud:nth-child(1) { top: 8%; width: 180px; height: 50px; animation-duration: 90s; }
+  .cloud:nth-child(1) { top: 8%; width: 180px; height: 50px; animation-duration: 144s; }
   .cloud:nth-child(1)::before { width: 70px; height: 70px; top: -30px; left: 30px; }
   .cloud:nth-child(1)::after { width: 50px; height: 50px; top: -20px; left: 90px; }
-  .cloud:nth-child(2) { top: 18%; width: 140px; height: 40px; animation-duration: 120s; animation-delay: -20s; }
+  .cloud:nth-child(2) { top: 18%; width: 140px; height: 40px; animation-duration: 192s; animation-delay: -20s; }
   .cloud:nth-child(2)::before { width: 55px; height: 55px; top: -25px; left: 20px; }
   .cloud:nth-child(2)::after { width: 40px; height: 40px; top: -15px; left: 70px; }
-  .cloud:nth-child(3) { top: 5%; width: 200px; height: 55px; animation-duration: 100s; animation-delay: -35s; }
+  .cloud:nth-child(3) { top: 5%; width: 200px; height: 55px; animation-duration: 160s; animation-delay: -35s; }
   .cloud:nth-child(3)::before { width: 80px; height: 80px; top: -35px; left: 40px; }
   .cloud:nth-child(3)::after { width: 60px; height: 60px; top: -25px; left: 110px; }
 
-  body.weather-windy .cloud { animation-duration: 24s !important; }
-  body.weather-windy .cloud:nth-child(2) { animation-duration: 32s !important; }
-  body.weather-windy .cloud:nth-child(3) { animation-duration: 28s !important; }
+  body.weather-windy .cloud { animation-duration: 38.4s !important; }
+  body.weather-windy .cloud:nth-child(2) { animation-duration: 51.2s !important; }
+  body.weather-windy .cloud:nth-child(3) { animation-duration: 44.8s !important; }
 
   @keyframes drift-cloud {
     0% { left: -250px; }
@@ -625,7 +625,7 @@ function nightIcon(code) {
     d.className = "raindrop";
     d.style.left = (Math.random() * 100) + "%";
     d.style.height = (15 + Math.random() * 25) + "px";
-    d.style.animationDuration = (1.0 + Math.random() * 1.0) + "s";
+    d.style.animationDuration = (1.6 + Math.random() * 1.6) + "s";
     d.style.animationDelay = (Math.random() * 2) + "s";
     rain.appendChild(d);
   }
