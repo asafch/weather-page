@@ -231,7 +231,9 @@
   .content {
     position: relative; z-index: 1;
     display: flex; flex-direction: column;
-    height: 100%; padding: 16px 20px;
+    width: 1024px; height: 768px;
+    padding: 16px 20px;
+    transform-origin: top left;
   }
 
   .header {
@@ -1082,6 +1084,16 @@ function formatTime(date) {
   var m = date.getMinutes();
   return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
 }
+
+// ── Scale UI to fit viewport ──
+function scaleUI() {
+  var c = document.querySelector('.content');
+  var s = Math.min(window.innerWidth / 1024, window.innerHeight / 768);
+  c.style.transform = 'scale(' + s + ')';
+  c.style.marginLeft = Math.max(0, (window.innerWidth - 1024 * s) / 2) + 'px';
+}
+window.addEventListener('resize', scaleUI);
+scaleUI();
 
 initLocation(function() {
   fetchAll();
